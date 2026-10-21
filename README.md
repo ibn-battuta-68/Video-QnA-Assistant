@@ -1,6 +1,6 @@
 # Video RAG
 
-Video question answering with scene-aware chunks, hybrid retrieval, and local multimodal models. The pipeline combines video frames, visual captions, and speech transcripts to retrieve evidence for a question. LLaVA receives timestamped text and a **two-column, three-row grid of up to six frames** to generate an answer.
+Video question answering with scene-aware chunks, hybrid retrieval, and local multimodal models. The pipeline retrieves frames, captions, and speech transcripts, then sends timestamped text and a **two-column, three-row grid of up to six frames** to LLaVA for an answer.
 
 ## Files
 
@@ -10,14 +10,14 @@ Video question answering with scene-aware chunks, hybrid retrieval, and local mu
   retrieval.py          # Dense text/image retrieval, BM25, and rank fusion
   video_rag.py          # Model loading, indexing, answering, and command-line entry point
   benchmark.py          # EgoSchema evaluation, scoring, and resumable predictions
-  test_video_rag.py     # Pipeline and evaluation checks
+  test_video_rag.py      # Pipeline and evaluation checks
   video_rag_demo.ipynb   # Interactive walkthrough
   requirements.txt
   README.md
   .gitignore
 ```
 
-`video_rag.py` is the entry point for video indexing and question answering. `benchmark.py` runs EgoSchema evaluation. Both use the same video processing and retrieval code.
+Use `video_rag.py` for indexing and question answering, and `benchmark.py` for EgoSchema evaluation. Both share the same processing and retrieval pipeline.
 
 ## Setup
 
@@ -51,13 +51,13 @@ Install the Python dependencies:
 python -m pip install -r requirements.txt
 ```
 
-Start the Ollama app, or run `ollama serve` in another terminal if its server is not already running. Download the vision model:
+Start Ollama, or run `ollama serve` in another terminal, then download the vision model:
 
 ```sh
 ollama pull llava
 ```
 
-MiniLM, CLIP, and Whisper weights download when first used. GPU acceleration is optional. The default Ollama endpoint is `http://localhost:11434`; set `OLLAMA_HOST` to use another server. No API key is needed for the default local setup.
+MiniLM, CLIP, and Whisper weights download on first use. GPU acceleration is optional; no API key is needed locally. Ollama defaults to `http://localhost:11434`; override it with `OLLAMA_HOST`.
 
 ## Use
 
@@ -68,9 +68,9 @@ python video_rag.py ingest data/videos/example.mp4 --index data/indexes/example
 python video_rag.py ask "What happens after the person opens the drawer?" --index data/indexes/example --grid outputs/evidence.jpg
 ```
 
-The `ask` command prints JSON containing the answer, retrieved sources, branch ranks, scores, and frame timestamps. `--grid` also saves the evidence image.
+`ask` prints JSON with the answer, sources, retrieval ranks/scores, and frame timestamps. `--grid` saves the evidence image.
 
-To skip speech transcription, add `--no-transcribe` to `ingest`. Visual captions remain enabled, so silent footage can still be searched with BM25. Download a video from a supported URL with:
+Add `--no-transcribe` to `ingest` to skip speech; visual captions still support BM25 on silent footage. To download a video:
 
 ```sh
 python video_rag.py download "https://www.youtube.com/watch?v=VIDEO_ID" --output data/videos/example.mp4
@@ -88,7 +88,7 @@ result = rag.answer("What is happening?", grid_path=Path("outputs/evidence.jpg")
 print(result["answer"])
 ```
 
-For an interactive walkthrough, open [video_rag_demo.ipynb](video_rag_demo.ipynb). It covers indexing, question answering, grid display, retrieval comparisons, and loading a saved index. EgoSchema evaluation runs separately through `benchmark.py`.
+The [demo notebook](video_rag_demo.ipynb) covers indexing, answering, grid display, retrieval comparisons, and index reloading. EgoSchema evaluation runs separately through `benchmark.py`.
 
 To use JupyterLab:
 
@@ -101,9 +101,9 @@ Select the project's Python environment and set the video path and question in t
 
 ## How retrieval works
 
-1. **Detect shots:** PySceneDetect finds visual cuts. Each shot becomes a chunk; shots longer than 30 seconds are subdivided. Chunks stay within detected shot boundaries. Continuous videos with no cuts still get full coverage through the duration cap.
+1. **Detect shots:** PySceneDetect finds visual cuts. Shots are split into chunks of at most 30 seconds without crossing detected boundaries. The duration cap also covers continuous footage.
 2. **Prepare evidence:** Frames are sampled within chunks at roughly three-second intervals. Whisper words are assigned once by timestamp midpoint. LLaVA captions each chunk from a grid, giving BM25 useful text even without speech.
-3. **Retrieve:** MiniLM searches caption/transcript embeddings. CLIP searches frame embeddings using the question, with each chunk represented by its best frame match. BM25 searches the same caption/transcript text for exact terms. Text and image embeddings use separate spaces.
+3. **Retrieve:** MiniLM searches caption/transcript embeddings, CLIP finds each chunk's best frame match, and BM25 matches exact terms in the text. Text and image embeddings use separate spaces.
 4. **Combine:** Weighted reciprocal rank fusion merges the three rankings with constant 60. Dense text and images each get half the dense weight; BM25 gets the sparse weight. Both branch weights default to 1. Use `--mode dense`, `--mode bm25`, or `--mode hybrid` to compare them.
 5. **Answer:** Up to six frames are spread across retrieved chunks, sorted by time, and arranged left to right, top to bottom in the grid. Timestamped captions and transcripts accompany the image.
 
@@ -132,7 +132,7 @@ Custom image embedding models must support both image and text inputs in the sam
 
 Run `python video_rag.py ingest --help`, `python video_rag.py ask --help`, or `python benchmark.py --help` for all options.
 
-Each index stores JSON metadata, JPEG frames, caption grids, and NumPy vectors for one video. Repeating ingestion with identical video content and settings reuses it. Changed content or settings require another index directory. Answering uses the model configuration stored in the index. Failed index builds are cleaned up.
+Each index stores one video's JSON metadata, JPEG frames, caption grids, and NumPy vectors. Identical content and settings reuse the index; changes require a new directory. Answering uses its saved model configuration. Failed builds are cleaned up.
 
 ## EgoSchema
 
@@ -159,7 +159,7 @@ Evaluate the public subset:
 python benchmark.py --questions data/egoschema/questions.json --answers data/egoschema/subset_answers.json --videos data/egoschema/videos --output outputs/egoschema-hybrid
 ```
 
-Add `--limit 5` with a separate output directory for a smoke test. With `--answers`, only questions with public labels are selected by default. Labels are used only for selection/scoring; models see the question, five choices, and video evidence. Nothing is trained on EgoSchema.
+Add `--limit 5` and a separate output directory for a quick trial. `--answers` selects publicly labeled questions by default. Labels are used only for selection/scoring; models receive the question, five choices, and video evidence. Nothing is trained on EgoSchema.
 
 Benchmarking defaults to **vision-only**, including visual captions and CLIP frames. `--with-audio` adds speech and should be reported as a separate experiment. Normal video indexing includes audio by default.
 
@@ -173,7 +173,7 @@ Compare retrieval by rerunning with `--mode dense` or `--mode bm25` and a separa
 | `predictions.json` | Official `{q_uid: 0..4}` prediction format |
 | `predictions.csv` | Convenience CSV; adapt columns to the current Kaggle sample if needed |
 
-Rerun the same command to resume. Successful predictions are skipped and failures retried. Failed/malformed answers count as incorrect; coverage is reported separately. Incomplete runs exit with a nonzero status. Use a new output directory when changing settings or question selection, and keep videos/model weights unchanged during a resumed run.
+Rerun the same command to resume, skipping successes and retrying failures. Failed or malformed answers count as incorrect; coverage is reported separately. Incomplete runs exit with a nonzero status. Changed settings or question selection require a new output directory; keep videos and model weights unchanged when resuming.
 
 Predict the full question set:
 
@@ -189,14 +189,7 @@ Score saved predictions against all public labels:
 python benchmark.py --predictions outputs/egoschema-hybrid/predictions.json --answers data/egoschema/subset_answers.json
 ```
 
-No measured EgoSchema results are published with this repository. Report the evaluated count, coverage, models, retrieval mode, settings, and audio use with your results. Generation uses a fixed seed and zero temperature, but changes in hardware or model weights may still affect answers.
-
-## Limitations
-
-- Shot detection identifies visual cuts rather than semantic scene changes. Continuous footage relies on the chunk duration cap.
-- Answers are based on retrieved text and at most six sampled frames; brief actions and events outside the retrieved evidence may be missed.
-- Visual captions and speech transcripts are model-generated and can contain errors.
-- Retrieval loads one video's vectors into memory. The project supports per-video question answering rather than searching a collection of videos.
+No measured EgoSchema results are published here. Report the evaluated count, coverage, models, retrieval settings, and audio use with results. Generation uses a fixed seed and zero temperature, though hardware or model changes can affect answers.
 
 ## References
 
