@@ -1,0 +1,8 @@
+numpy>=1.26,<3
+Pillow>=10.4,<13
+opencv-python>=4.10,<5
+scenedetect>=0.6.4,<0.8
+sentence-transformers>=3.3,<6
+ollama>=0.4,<1
+openai-whisper>=20240930
+yt-dlp>=2024.12.13
